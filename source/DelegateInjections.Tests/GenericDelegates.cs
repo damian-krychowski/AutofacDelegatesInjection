@@ -14,7 +14,7 @@ namespace DelegateInjections.Tests
 
     public delegate void Push<T1, T2>(T1 first, T2 second);
 
-    public class Valut<T>
+    public class Store<T>
     {
         public List<T> Items { get; } = new List<T>();
     }
@@ -23,18 +23,18 @@ namespace DelegateInjections.Tests
     {
         [Delegate(typeof(Push<,>))]
         public static void Push<T1, T2>(T1 first, T2 second, 
-            [Inject] Valut<T1> firstVault,
-            [Inject] Valut<T2> secondVault)
+            [Inject] Store<T1> firstStore,
+            [Inject] Store<T2> secondStore)
         {
-            firstVault.Items.Add(first);
-            secondVault.Items.Add(second);
+            firstStore.Items.Add(first);
+            secondStore.Items.Add(second);
         }
 
         [Delegate(typeof(Pop<>))]
-        public static T Pop<T>([Inject] Valut<T> vault)
+        public static T Pop<T>([Inject] Store<T> store)
         {
-            var item = vault.Items.Last();
-            vault.Items.RemoveAt(vault.Items.Count - 1);
+            var item = store.Items.Last();
+            store.Items.RemoveAt(store.Items.Count - 1);
 
             return item;
         }
@@ -47,7 +47,7 @@ namespace DelegateInjections.Tests
         {
             //given
             var builder = new ContainerBuilder();
-            builder.RegisterGeneric(typeof(Valut<>)).SingleInstance();
+            builder.RegisterGeneric(typeof(Store<>)).SingleInstance();
             builder.DiscoverDelegates<GenericDelegates>();
 
             var container = builder.Build();
