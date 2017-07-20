@@ -53,6 +53,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DelegateDiscoveryTests.cs" />
+    <Compile Include="GenericDelegates.cs" />
     <Compile Include="InjectionsTests.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

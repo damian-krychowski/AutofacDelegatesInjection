@@ -43,6 +43,9 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="DelegateAttribute.cs" />
+    <Compile Include="DelegateDefinition.cs" />
+    <Compile Include="InjectAttribute.cs" />
     <Compile Include="RegisterDelegates.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

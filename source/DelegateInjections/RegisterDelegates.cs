@@ -8,28 +8,28 @@ using System.Threading.Tasks;
 using Autofac;
 using Autofac.Builder;
 using Autofac.Core;
+using Autofac.Core.Activators.Delegate;
+using Autofac.Core.Lifetime;
+using Autofac.Core.Registration;
 
 namespace DelegateInjections
 {
-    [AttributeUsage(AttributeTargets.Parameter)]
-    public class InjectAttribute : Attribute
-    {
-        
-    }
-
-    [AttributeUsage(AttributeTargets.Method)]
-    public class DelegateAttribute : Attribute
-    {
-        public DelegateAttribute(Type delegateType)
-        {
-            DelegateType = delegateType;
-        }
-
-        public Type DelegateType { get; }
-    }
-
     public static class RegisterDelegates
     {
+        public static bool IsSubclassOfRawGeneric(this Type toCheck, Type generic)
+        {
+            while (toCheck != null && toCheck != typeof(object))
+            {
+                var cur = toCheck.IsGenericType ? toCheck.GetGenericTypeDefinition() : toCheck;
+                if (generic == cur)
+                {
+                    return true;
+                }
+                toCheck = toCheck.BaseType;
+            }
+            return false;
+        }
+
         public static IRegistrationBuilder<TResult, SimpleActivatorData, SingleRegistrationStyle>
             RegisterDelegate<TArg, TResult>(
                 this ContainerBuilder builder,
@@ -60,31 +60,51 @@ namespace DelegateInjections
                 arg3: ctx.Resolve<TArg3>()));
         }
 
-        public static void DiscoverDelegates<T>(this ContainerBuilder builder)
+        public static ContainerBuilder DiscoverDelegates<T>(this ContainerBuilder builder)
         {
             foreach (var method in GetDelegateMethods<T>())
             {
                 var attribute = GetDelegateAttribute(method);
 
-                builder.Register(ctx =>
+                if (attribute.DelegateType.IsGenericTypeDefinition)
                 {
-                    var arguments = ReplaceInjectableArgumentsWithResolvedConstants(method, ctx);
-
-                    var injectableArgumentsInClosure = Expression.Invoke(
-                        expression: Expression.Constant(ConvertMethodToDelegate(method)),
-                        arguments: arguments);
-
-                    var nonInjectableParameters = arguments
-                        .Where(x => x is ParameterExpression)
-                        .Cast<ParameterExpression>()
-                        .ToArray();
-
-                    return (dynamic) Expression.Lambda(
-                        delegateType: attribute.DelegateType,
-                        body: injectableArgumentsInClosure,
-                        parameters: nonInjectableParameters).Compile();
-                }).As(attribute.DelegateType);
+                    builder
+                        .RegisterSource(new GenericDelegateRegistrationSource(
+                            definition: new DelegateDefinition(
+                                delegateType: attribute.DelegateType,
+                                delegateMethod: method)));
+                }
+                else
+                {
+                    builder
+                        .Register(ctx => BuildUpConcreteDelegate(ctx, method, attribute.DelegateType))
+                        .As(attribute.DelegateType);
+                }
             }
+
+            return builder;
+        }
+
+        private static dynamic BuildUpConcreteDelegate(
+            IComponentContext ctx,
+            MethodInfo delegateImplementationMethod,
+            Type delegateType)
+        {
+            var arguments = ReplaceInjectableArgumentsWithResolvedConstants(delegateImplementationMethod, ctx);
+
+            var injectableArgumentsInClosure = Expression.Invoke(
+                expression: Expression.Constant(ConvertMethodToDelegate(delegateImplementationMethod)),
+                arguments: arguments);
+
+            var nonInjectableParameters = arguments
+                .Where(x => x is ParameterExpression)
+                .Cast<ParameterExpression>()
+                .ToArray();
+
+            return Expression.Lambda(
+                delegateType: delegateType,
+                body: injectableArgumentsInClosure,
+                parameters: nonInjectableParameters).Compile();
         }
 
         private static Expression[] ReplaceInjectableArgumentsWithResolvedConstants(
@@ -132,6 +152,47 @@ namespace DelegateInjections
 
             var call = Expression.Call(method, parameters);
             return Expression.Lambda(call, parameters).Compile();
+        }
+
+        internal class GenericDelegateRegistrationSource : IRegistrationSource
+        {
+            private readonly DelegateDefinition _definition;
+
+            public GenericDelegateRegistrationSource(DelegateDefinition definition)
+            {
+                if (!definition.DelegateType.IsGenericTypeDefinition)
+                {
+                    throw new ArgumentException($"Type {_definition.DelegateType.FullName} is not open generic type!");
+                }
+
+                _definition = definition;
+            }
+
+            public IEnumerable<IComponentRegistration> RegistrationsFor(
+                Service service,
+                Func<Service, IEnumerable<IComponentRegistration>> registrationAccessor)
+            {
+                var swt = service as IServiceWithType;
+                if (swt == null || !swt.ServiceType.IsSubclassOfRawGeneric(_definition.DelegateType))
+                {
+                    return Enumerable.Empty<IComponentRegistration>();
+                }
+
+                return new IComponentRegistration[] {new ComponentRegistration(
+                    Guid.NewGuid(),
+                    new DelegateActivator(swt.ServiceType, (ctx, p) => BuildUpConcreteDelegate(
+                        ctx: ctx,
+                        delegateImplementationMethod: _definition
+                            .MakeGenericMethod(swt.ServiceType.GenericTypeArguments),
+                        delegateType: swt.ServiceType)),
+                    new CurrentScopeLifetime(),
+                    InstanceSharing.None,
+                    InstanceOwnership.OwnedByLifetimeScope,
+                    new[] {service},
+                    new Dictionary<string, object>())};
+            }
+
+            public bool IsAdapterForIndividualComponents => false;
         }
     }
 }
