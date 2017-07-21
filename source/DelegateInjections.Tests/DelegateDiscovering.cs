@@ -79,7 +79,7 @@ namespace DelegateInjections.Tests
         }
     }
 
-    public class DelegateDiscoveryTests
+    public class DelegateDiscovering
     {
         [Test]
         public void can_discover_and_use_funcs()

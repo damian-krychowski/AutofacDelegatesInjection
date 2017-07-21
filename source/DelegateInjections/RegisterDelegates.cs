@@ -31,6 +31,14 @@ namespace DelegateInjections
         }
 
         public static IRegistrationBuilder<TResult, SimpleActivatorData, SingleRegistrationStyle>
+           RegisterDelegate<TResult>(
+               this ContainerBuilder builder,
+               Func<TResult> delegateFactory)
+        {
+            return builder.Register(ctx => delegateFactory());
+        }
+
+        public static IRegistrationBuilder<TResult, SimpleActivatorData, SingleRegistrationStyle>
             RegisterDelegate<TArg, TResult>(
                 this ContainerBuilder builder,
                 Func<TArg, TResult> delegateFactory)
